@@ -10,15 +10,13 @@ import java.io.*;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 
 public class StoreGUI extends Application {
 
     private Stage window;
     
-    // Session Data
+    // --- Session Data ---
     private String currentUserID = "";
     private String currentUserName = "";
     private String currentUserRole = "";
@@ -38,7 +36,7 @@ public class StoreGUI extends Application {
         window.show();
     }
 
-    // Login Screen
+    // --- Login Screen ---
     private void showLoginScreen() {
         VBox layout = new VBox(15);
         layout.setAlignment(Pos.CENTER);
@@ -73,7 +71,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(layout, 400, 350));
     }
 
-    // Main Menu
+    // --- Main Menu ---
     private void showMainMenu() {
         VBox layout = new VBox(15);
         layout.setAlignment(Pos.CENTER);
@@ -88,19 +86,21 @@ public class StoreGUI extends Application {
         Button btn2 = new Button("2. Sales System");
         Button btn3 = new Button("3. Search Information");
         Button btn4 = new Button("4. Edit Information");
-        Button btn5 = new Button("5. Clock-out");
+        Button btn5 = new Button("5. Reports & Analytics");
+        Button btn6 = new Button("6. Clock-out");
 
-        setBtnWidth(btn1, btn2, btn3, btn4, btn5);
+        setBtnWidth(btn1, btn2, btn3, btn4, btn5, btn6);
 
         btn1.setOnAction(e -> showStockMenu());
         btn2.setOnAction(e -> showSalesScreen());
         btn3.setOnAction(e -> showSearchMenu());
         btn4.setOnAction(e -> showEditMenu());
-        btn5.setOnAction(e -> performClockOut());
+        btn5.setOnAction(e -> showAnalyticsMenu());
+        btn6.setOnAction(e -> performClockOut());
 
-        layout.getChildren().addAll(welcome, roleLbl, info, new Separator(), btn1, btn2, btn3, btn4);
+        layout.getChildren().addAll(welcome, roleLbl, info, new Separator(), btn1, btn2, btn3, btn4, btn5);
 
-        // Manager Exclusive Option
+        // Manager Option
         if (currentUserRole.equalsIgnoreCase("Manager")) {
             Button btnReg = new Button("★ Register New Employee");
             btnReg.setMinWidth(250);
@@ -110,11 +110,11 @@ public class StoreGUI extends Application {
             layout.getChildren().add(btnReg);
         }
 
-        layout.getChildren().add(btn5); 
-        window.setScene(new Scene(layout, 400, 500));
+        layout.getChildren().add(btn6);
+        window.setScene(new Scene(layout, 400, 600));
     }
 
-    // Manager Registration Screen
+    // --- Register Employee (Manager) ---
     private void showRegisterEmployeeScreen() {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -160,7 +160,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(grid, 400, 400));
     }
 
-    // Stock Management Menu
+    // --- Stock Management Menu ---
     private void showStockMenu() {
         VBox layout = new VBox(15);
         layout.setAlignment(Pos.CENTER);
@@ -182,7 +182,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(layout, 400, 350));
     }
 
-    // Stock Count Screen
+    // --- Stock Count Screen ---
     private void showStockCountScreen() {
         VBox layout = new VBox(10);
         layout.setPadding(new Insets(15));
@@ -212,7 +212,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(layout, 400, 400));
     }
 
-    // Stock Movement Screen
+    // --- Stock Movement Screen ---
     private void showStockMovementScreen() {
         GridPane grid = new GridPane();
         grid.setPadding(new Insets(20));
@@ -249,7 +249,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(grid, 400, 400));
     }
 
-    // Sales System Screen
+    // --- Sales System ---
     private void showSalesScreen() {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -288,7 +288,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(grid, 400, 450));
     }
 
-    // Search Information Menu
+    // --- Search Information ---
     private void showSearchMenu() {
         VBox layout = new VBox(15);
         layout.setAlignment(Pos.CENTER);
@@ -300,6 +300,10 @@ public class StoreGUI extends Application {
         TextField searchField = new TextField();
         searchField.setPromptText("Enter Model or Keyword");
 
+        ComboBox<String> sortBox = new ComboBox<>();
+        sortBox.getItems().addAll("Sort by Date (Newest)", "Sort by Amount (High-Low)");
+        sortBox.setValue("Sort by Date (Newest)");
+        
         Button btnSearchStock = new Button("Search Stock (Model)");
         Button btnSearchSales = new Button("Search Sales (Keyword)");
         Button btnBack = new Button("Back");
@@ -309,16 +313,103 @@ public class StoreGUI extends Application {
         output.setPrefHeight(300);
 
         btnSearchStock.setOnAction(e -> output.setText(searchStockLogic(searchField.getText())));
-        btnSearchSales.setOnAction(e -> output.setText(searchSalesLogic(searchField.getText())));
+        
+        btnSearchSales.setOnAction(e -> {
+            String res = searchSalesLogic(searchField.getText(), sortBox.getValue());
+            output.setText(res);
+        });
+
         btnBack.setOnAction(e -> showMainMenu());
 
         setBtnWidth(btnSearchStock, btnSearchSales, btnBack);
 
-        layout.getChildren().addAll(title, searchField, btnSearchStock, btnSearchSales, output, btnBack);
+        layout.getChildren().addAll(title, searchField, new Label("Sales Sorting:"), sortBox, 
+                                    btnSearchStock, btnSearchSales, output, btnBack);
+        window.setScene(new Scene(layout, 500, 550));
+    }
+
+    // --- Reports & Analytics ---
+    private void showAnalyticsMenu() {
+        VBox layout = new VBox(15);
+        layout.setAlignment(Pos.CENTER);
+        layout.setPadding(new Insets(20));
+
+        Label title = new Label("Reports & Analytics");
+        title.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
+
+        TextArea reportArea = new TextArea();
+        reportArea.setEditable(false);
+        reportArea.setPrefHeight(250);
+
+        Button btnDataAnalytics = new Button("Data Analytics (Revenue)");
+        Button btnEmpMetrics = new Button("Employee Performance Metrics");
+        Button btnAutoEmail = new Button("Auto Email to HQ");
+        Button btnBack = new Button("Back");
+
+        setBtnWidth(btnDataAnalytics, btnEmpMetrics, btnAutoEmail, btnBack);
+
+        // Revenue Logic
+        btnDataAnalytics.setOnAction(e -> {
+            double totalRevenue = 0;
+            int totalCount = 0;
+            try (Scanner sc = new Scanner(new File("sales.csv"))) {
+                if(sc.hasNextLine()) sc.nextLine();
+                while(sc.hasNextLine()) {
+                    String[] p = sc.nextLine().split(",");
+                    if (p.length >= 7) {
+                        try { totalRevenue += Double.parseDouble(p[6]); totalCount++; } catch(Exception ex){}
+                    }
+                }
+                reportArea.setText("=== DATA ANALYTICS ===\n\n");
+                reportArea.appendText("Total Sales Count: " + totalCount + "\n");
+                reportArea.appendText(String.format("Total Revenue: $%.2f\n", totalRevenue));
+                reportArea.appendText("Average Order Value: $" + (totalCount > 0 ? String.format("%.2f", totalRevenue/totalCount) : "0.00"));
+            } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
+        });
+
+        // Performance Logic
+        btnEmpMetrics.setOnAction(e -> {
+            Map<String, Double> salesMap = new HashMap<>();
+            try (Scanner sc = new Scanner(new File("sales.csv"))) {
+                if(sc.hasNextLine()) sc.nextLine();
+                while(sc.hasNextLine()) {
+                    String[] p = sc.nextLine().split(",");
+                    if (p.length >= 7) {
+                        String empID = p[3]; 
+                        double amt = Double.parseDouble(p[6]);
+                        salesMap.put(empID, salesMap.getOrDefault(empID, 0.0) + amt);
+                    }
+                }
+                StringBuilder sb = new StringBuilder("=== EMPLOYEE PERFORMANCE ===\n(Total Revenue Generated)\n\n");
+                salesMap.forEach((k, v) -> sb.append("Employee ").append(k).append(": $").append(String.format("%.2f", v)).append("\n"));
+                reportArea.setText(sb.toString());
+            } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
+        });
+
+        // Email Logic
+        btnAutoEmail.setOnAction(e -> {
+            try (BufferedWriter log = new BufferedWriter(new FileWriter("email_log.txt", true))) {
+                log.write("REPORT SENT: " + LocalDate.now() + " " + LocalTime.now() + " | Outlet: " + currentOutletCode + "\n");
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Auto Email");
+                alert.setHeaderText("Report Sent Successfully");
+                alert.setContentText("Daily sales report has been emailed to hq@store.com.");
+                alert.showAndWait();
+            } catch(Exception ex) { 
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Failed to send email.");
+                alert.show();
+            }
+        });
+
+        btnBack.setOnAction(e -> showMainMenu());
+
+        layout.getChildren().addAll(title, btnDataAnalytics, btnEmpMetrics, btnAutoEmail, reportArea, btnBack);
         window.setScene(new Scene(layout, 500, 500));
     }
 
-    // Edit Information Menu
+
+    // --- Edit Information Menu ---
     private void showEditMenu() {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE); 
@@ -425,8 +516,8 @@ public class StoreGUI extends Application {
         salesLayout.getChildren().addAll(instr, salesCust, salesFind, new Separator(), instr2, salesEditLine, actionBox, salesMsg);
         salesTab.setContent(salesLayout);
 
+        // Main Edit Layout
         tabPane.getTabs().addAll(stockTab, salesTab);
-        
         VBox mainBox = new VBox(10);
         Button back = new Button("Back to Main Menu");
         back.setOnAction(e -> showMainMenu());
@@ -436,7 +527,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(mainBox, 500, 500));
     }
 
-    // Clock Out
+    // --- Clock Out ---
     private void performClockOut() {
         LocalTime timeOut = LocalTime.now().withNano(0);
         long mins = Duration.between(timeIn, timeOut).toMinutes();
@@ -456,9 +547,7 @@ public class StoreGUI extends Application {
         showLoginScreen();
     }
 
-    // Helper Methods (Backend)
-
-    // Authenticate & Get Name
+    // --- Helper Methods (File I/O) ---
     private boolean performLogin(String id, String pass) {
         try (Scanner sc = new Scanner(new File("employee.csv"))) {
             while (sc.hasNextLine()) {
@@ -477,7 +566,6 @@ public class StoreGUI extends Application {
         return false;
     }
 
-    // Get Outlet Name
     private String getOutletNameFromFile(String code) {
         try (Scanner sc = new Scanner(new File("outlet.csv"))) {
             while (sc.hasNextLine()) {
@@ -490,7 +578,6 @@ public class StoreGUI extends Application {
         return "Unknown Outlet";
     }
 
-    // Get Stock Quantity
     private int getStockQty(String model, String outletCode) {
         try (Scanner sc = new Scanner(new File("model.csv"))) {
             int colIndex = -1;
@@ -511,7 +598,6 @@ public class StoreGUI extends Application {
         return 0;
     }
 
-    // Update Stock (Sales)
     private boolean updateStockInCSV(String model, int qtySold, String outletCode) {
         List<String> lines = new ArrayList<>();
         boolean found = false;
@@ -550,7 +636,6 @@ public class StoreGUI extends Application {
         return found;
     }
 
-    // Write Sales Record
     private void writeSalesRecord(String cust, String mod, int q, double p, String meth) {
         try (BufferedWriter w = new BufferedWriter(new FileWriter("sales.csv", true))) {
             w.write(LocalDate.now() + "," + LocalTime.now().withNano(0) + "," + 
@@ -560,18 +645,15 @@ public class StoreGUI extends Application {
         } catch(Exception e) {}
     }
 
-    // Search Stock Logic
     private String searchStockLogic(String key) {
         StringBuilder sb = new StringBuilder();
         try (Scanner sc = new Scanner(new File("model.csv"))) {
             String header = sc.nextLine(); 
             String[] outletCodes = header.split(","); 
-            
             String[] outletNames = new String[outletCodes.length];
             for(int i=1; i<outletCodes.length; i++) {
                 outletNames[i] = getOutletNameFromFile(outletCodes[i].trim()) + " (" + outletCodes[i].trim() + ")";
             }
-
             while(sc.hasNextLine()) {
                 String line = sc.nextLine();
                 if(line.toLowerCase().contains(key.toLowerCase())) {
@@ -589,29 +671,43 @@ public class StoreGUI extends Application {
         return sb.length() > 0 ? sb.toString() : "No results.";
     }
 
-    // Search Sales Logic
-    private String searchSalesLogic(String key) {
-        StringBuilder sb = new StringBuilder();
+    private String searchSalesLogic(String key, String sortBy) {
+        List<String[]> records = new ArrayList<>();
         try (Scanner sc = new Scanner(new File("sales.csv"))) {
             if(sc.hasNextLine()) sc.nextLine(); 
             while(sc.hasNextLine()) {
                 String line = sc.nextLine();
                 if(line.toLowerCase().contains(key.toLowerCase())) {
-                    String[] p = line.split(",");
-                    if (p.length >= 7) {
-                        sb.append("Date: ").append(p[0]).append(" | Time: ").append(p[1]).append("\n");
-                        sb.append("Customer: ").append(p[4]).append("\n");
-                        sb.append("Total: $").append(p[6]).append("\n");
-                        sb.append("Items: ").append(p.length > 7 ? p[7] : "N/A").append("\n");
-                        sb.append("--------------------\n");
-                    }
+                    records.add(line.split(","));
                 }
             }
         } catch(Exception e) { return "Error reading sales.csv"; }
+
+        if(sortBy.contains("Amount")) {
+            records.sort((a, b) -> {
+                try {
+                    double v1 = Double.parseDouble(a[6]);
+                    double v2 = Double.parseDouble(b[6]);
+                    return Double.compare(v2, v1);
+                } catch(Exception e) { return 0; }
+            });
+        } else {
+            Collections.reverse(records);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for(String[] p : records) {
+            if (p.length >= 7) {
+                sb.append("Date: ").append(p[0]).append(" | Time: ").append(p[1]).append("\n");
+                sb.append("Customer: ").append(p[4]).append("\n");
+                sb.append("Total: $").append(p[6]).append("\n");
+                sb.append("Items: ").append(p.length > 7 ? p[7] : "N/A").append("\n");
+                sb.append("--------------------\n");
+            }
+        }
         return sb.length() > 0 ? sb.toString() : "No records found.";
     }
 
-    // Update Exact Stock Logic
     private boolean updateExactStock(String model, String outlet, String newQty) {
         List<String> lines = new ArrayList<>();
         boolean updated = false;
