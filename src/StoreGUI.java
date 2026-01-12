@@ -259,19 +259,27 @@ public class StoreGUI extends Application {
         TextField modelField = new TextField(); modelField.setPromptText("Model Name");
         TextField qtyField = new TextField(); qtyField.setPromptText("Quantity");
         TextField priceField = new TextField(); priceField.setPromptText("Unit Price");
-        TextField methodField = new TextField(); methodField.setPromptText("Cash/Card/QR");
+        
+        // MODIFICATION 1: Changed method textfield to ComboBox
+        ComboBox<String> methodBox = new ComboBox<>();
+        methodBox.getItems().addAll("Cash", "Card", "QR");
+        methodBox.setValue("Cash");
+        methodBox.setPromptText("Select Method");
+
         Button sellBtn = new Button("Confirm Sale"); Button backBtn = new Button("Back"); Label status = new Label();
 
         sellBtn.setOnAction(e -> {
             try {
                 String cust = custField.getText(); String mod = modelField.getText();
                 int q = Integer.parseInt(qtyField.getText()); double p = Double.parseDouble(priceField.getText());
-                String meth = methodField.getText();
-                if(cust.isEmpty() || mod.isEmpty() || meth.isEmpty()) { status.setText("Missing fields."); return; }
+                String meth = methodBox.getValue(); // Get value from box
+                
+                if(cust.isEmpty() || mod.isEmpty() || meth == null) { status.setText("Missing fields."); return; }
                 if(updateStockInCSV(mod, q, currentOutletCode)) {
                     writeSalesRecord(cust, mod, q, p, meth);
                     status.setText("Sale Recorded!"); status.setStyle("-fx-text-fill: green;");
                     custField.clear(); modelField.clear(); qtyField.clear(); priceField.clear();
+                    methodBox.setValue("Cash");
                 } else {
                     status.setText("Error: Model not found or Low Stock."); status.setStyle("-fx-text-fill: red;");
                 }
@@ -282,7 +290,7 @@ public class StoreGUI extends Application {
         grid.add(new Label("Model:"), 0, 2); grid.add(modelField, 1, 2);
         grid.add(new Label("Qty:"), 0, 3); grid.add(qtyField, 1, 3);
         grid.add(new Label("Price:"), 0, 4); grid.add(priceField, 1, 4);
-        grid.add(new Label("Method:"), 0, 5); grid.add(methodField, 1, 5);
+        grid.add(new Label("Method:"), 0, 5); grid.add(methodBox, 1, 5);
         grid.add(sellBtn, 1, 6); grid.add(backBtn, 1, 7); grid.add(status, 0, 8, 2, 1);
         window.setScene(new Scene(grid, 400, 450));
     }
@@ -361,8 +369,9 @@ public class StoreGUI extends Application {
                 }
                 reportArea.setText("=== DATA ANALYTICS ===\n\n");
                 reportArea.appendText("Total Sales Count: " + totalCount + "\n");
-                reportArea.appendText(String.format("Total Revenue: $%.2f\n", totalRevenue));
-                reportArea.appendText("Average Order Value: $" + (totalCount > 0 ? String.format("%.2f", totalRevenue/totalCount) : "0.00"));
+                // MODIFICATION 4: Changed currency to RM
+                reportArea.appendText(String.format("Total Revenue: RM%.2f\n", totalRevenue));
+                reportArea.appendText("Average Order Value: RM" + (totalCount > 0 ? String.format("%.2f", totalRevenue/totalCount) : "0.00"));
             } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
         });
 
@@ -380,7 +389,8 @@ public class StoreGUI extends Application {
                     }
                 }
                 StringBuilder sb = new StringBuilder("=== EMPLOYEE PERFORMANCE ===\n(Total Revenue Generated)\n\n");
-                salesMap.forEach((k, v) -> sb.append("Employee ").append(k).append(": $").append(String.format("%.2f", v)).append("\n"));
+                // MODIFICATION 4: Changed currency to RM
+                salesMap.forEach((k, v) -> sb.append("Employee ").append(k).append(": RM").append(String.format("%.2f", v)).append("\n"));
                 reportArea.setText(sb.toString());
             } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
         });
@@ -451,6 +461,13 @@ public class StoreGUI extends Application {
         TextField salesCust = new TextField(); salesCust.setPromptText("Enter Customer Name"); salesCust.setMaxWidth(250);
         Button salesFind = new Button("Find Record");
         
+        // MODIFICATION 3: Better formatting (added preview area)
+        Label previewLbl = new Label("Record Preview:");
+        TextArea previewArea = new TextArea();
+        previewArea.setEditable(false);
+        previewArea.setMaxHeight(80);
+        previewArea.setMaxWidth(400);
+
         Label instr2 = new Label("2. Edit Raw Data (Format: Date,Time,Outlet,User,Cust,Method,Total,Items)");
         TextField salesEditLine = new TextField(); salesEditLine.setPromptText("Record will appear here"); salesEditLine.setMaxWidth(400);
         
@@ -470,12 +487,23 @@ public class StoreGUI extends Application {
             cacheLines.clear();
             foundLineIndex[0] = -1;
             salesEditLine.clear();
+            previewArea.clear();
             try (Scanner sc = new Scanner(new File("sales.csv"))) {
                 while(sc.hasNextLine()) cacheLines.add(sc.nextLine());
                 boolean found = false;
                 for(int i=0; i<cacheLines.size(); i++) {
-                    if(cacheLines.get(i).contains(salesCust.getText()) && !salesCust.getText().isEmpty()) {
+                    // MODIFICATION 3: Case insensitive search
+                    if(cacheLines.get(i).toLowerCase().contains(salesCust.getText().toLowerCase()) && !salesCust.getText().isEmpty()) {
                         salesEditLine.setText(cacheLines.get(i));
+                        
+                        // Parse for preview
+                        String[] p = cacheLines.get(i).split(",");
+                        if(p.length >= 7) {
+                            String pretty = "Date: " + p[0] + " | Cust: " + p[4] + " | Total: RM" + p[6] + "\n" +
+                                          "Items: " + (p.length > 7 ? p[7] : "N/A");
+                            previewArea.setText(pretty);
+                        }
+
                         foundLineIndex[0] = i;
                         found = true;
                         salesMsg.setText("Record found!");
@@ -506,13 +534,14 @@ public class StoreGUI extends Application {
                 rewriteSalesFile(cacheLines);
                 salesMsg.setText("Record Deleted.");
                 salesEditLine.clear();
+                previewArea.clear();
                 foundLineIndex[0] = -1;
             } else {
                 salesMsg.setText("Find a record first.");
             }
         });
 
-        salesLayout.getChildren().addAll(instr, salesCust, salesFind, new Separator(), instr2, salesEditLine, actionBox, salesMsg);
+        salesLayout.getChildren().addAll(instr, salesCust, salesFind, new Separator(), previewLbl, previewArea, instr2, salesEditLine, actionBox, salesMsg);
         salesTab.setContent(salesLayout);
 
         // Main Edit Layout
@@ -523,7 +552,7 @@ public class StoreGUI extends Application {
         mainBox.getChildren().addAll(tabPane, back);
         mainBox.setAlignment(Pos.CENTER);
         
-        window.setScene(new Scene(mainBox, 500, 500));
+        window.setScene(new Scene(mainBox, 500, 550));
     }
 
     // --- Clock Out ---
@@ -648,19 +677,28 @@ public class StoreGUI extends Application {
         StringBuilder sb = new StringBuilder();
         try (Scanner sc = new Scanner(new File("model.csv"))) {
             String header = sc.nextLine(); 
-            String[] outletCodes = header.split(","); 
-            String[] outletNames = new String[outletCodes.length];
-            for(int i=1; i<outletCodes.length; i++) {
-                outletNames[i] = getOutletNameFromFile(outletCodes[i].trim()) + " (" + outletCodes[i].trim() + ")";
-            }
+            String[] headers = header.split(","); 
+            
             while(sc.hasNextLine()) {
                 String line = sc.nextLine();
                 if(line.toLowerCase().contains(key.toLowerCase())) {
                     String[] p = line.split(",");
                     sb.append("Model: ").append(p[0]).append("\n");
                     for(int i=1; i<p.length; i++) {
-                        if(i < outletCodes.length) {
-                             sb.append(" - ").append(outletNames[i]).append(": ").append(p[i]).append("\n");
+                        if(i < headers.length) {
+                             // MODIFICATION 2: Handle "Price" header and Unknown Outlets
+                             String hName = headers[i].trim();
+                             if(hName.equalsIgnoreCase("Price")) {
+                                 sb.append(" - Price: RM").append(p[i]).append("\n");
+                             } else {
+                                 String outName = getOutletNameFromFile(hName);
+                                 if(!outName.contains("Unknown")) {
+                                     sb.append(" - ").append(outName).append(" (").append(hName).append("): ").append(p[i]).append("\n");
+                                 } else {
+                                     // If really unknown, just show code or skip
+                                     sb.append(" - ").append(hName).append(": ").append(p[i]).append("\n");
+                                 }
+                             }
                         }
                     }
                     sb.append("--------------------\n");
@@ -699,8 +737,24 @@ public class StoreGUI extends Application {
             if (p.length >= 7) {
                 sb.append("Date: ").append(p[0]).append(" | Time: ").append(p[1]).append("\n");
                 sb.append("Customer: ").append(p[4]).append("\n");
-                sb.append("Total: $").append(p[6]).append("\n");
-                sb.append("Items: ").append(p.length > 7 ? p[7] : "N/A").append("\n");
+                // MODIFICATION 2.1: Changed to RM
+                sb.append("Total: RM").append(p[6]).append("\n");
+                
+                // MODIFICATION 2.1: Parse Items and Quantity
+                String rawItems = p.length > 7 ? p[7] : "";
+                if(rawItems.contains(":")) {
+                     String[] parts = rawItems.split(":");
+                     if(parts.length >= 2) {
+                         // Removes semicolon if present
+                         String qty = parts[1].replace(";", "");
+                         sb.append("Items: ").append(parts[0])
+                           .append(", Quantity: ").append(qty).append("\n");
+                     } else {
+                         sb.append("Items: ").append(rawItems).append("\n");
+                     }
+                } else {
+                     sb.append("Items: ").append(rawItems).append("\n");
+                }
                 sb.append("--------------------\n");
             }
         }
