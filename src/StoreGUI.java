@@ -1,8 +1,12 @@
 import javafx.application.Application;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import java.io.*;
@@ -10,6 +14,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.*;
+import java.util.stream.Collectors;
+import javax.mail.*;
+import javax.mail.internet.*;
+import javax.activation.*;
 
 public class StoreGUI extends Application {
 
@@ -22,6 +30,11 @@ public class StoreGUI extends Application {
     private String currentOutletCode = "";
     private String currentOutletName = "";
     private LocalTime timeIn;
+    
+    // --- Email Configuration ---
+    private final String STUDENT_EMAIL = "ccharltondunstan@gmail.com"; 
+    private final String GMAIL_USERNAME = "ccharltondunstan@gmail.com";  
+    private final String GMAIL_APP_PASSWORD = "ytuq ntfw ghfb rhud"; 
 
     public static void main(String[] args) {
         launch(args);
@@ -31,6 +44,7 @@ public class StoreGUI extends Application {
     public void start(Stage primaryStage) {
         window = primaryStage;
         window.setTitle("Store Operations Management System");
+        createDummyFilesIfMissing(); 
         showLoginScreen();
         window.show();
     }
@@ -83,7 +97,7 @@ public class StoreGUI extends Application {
 
         Button btn1 = new Button("1. Stock Management");
         Button btn2 = new Button("2. Sales System");
-        Button btn3 = new Button("3. Search Information");
+        Button btn3 = new Button("3. Sales History (Filter/Sort)"); 
         Button btn4 = new Button("4. Edit Information");
         Button btn5 = new Button("5. Reports & Analytics");
         Button btn6 = new Button("6. Clock-out");
@@ -92,14 +106,14 @@ public class StoreGUI extends Application {
 
         btn1.setOnAction(e -> showStockMenu());
         btn2.setOnAction(e -> showSalesScreen());
-        btn3.setOnAction(e -> showSearchMenu());
+        btn3.setOnAction(e -> showHistoryFilterScreen()); 
         btn4.setOnAction(e -> showEditMenu());
         btn5.setOnAction(e -> showAnalyticsMenu());
         btn6.setOnAction(e -> performClockOut());
 
         layout.getChildren().addAll(welcome, roleLbl, info, new Separator(), btn1, btn2, btn3, btn4, btn5);
 
-        // Manager Option
+        // Manager Options
         if (currentUserRole.equalsIgnoreCase("Manager")) {
             Button btnReg = new Button("★ Register New Employee");
             btnReg.setMinWidth(250);
@@ -113,7 +127,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(layout, 400, 600));
     }
 
-    // --- Register Employee (Manager) ---
+    // --- Register Employee Screen ---
     private void showRegisterEmployeeScreen() {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -168,17 +182,62 @@ public class StoreGUI extends Application {
         Label title = new Label("Stock Management");
         title.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
 
+        Button btnViewAll = new Button("View All Inventory"); 
         Button btnCount = new Button("Morning/Night Stock Count");
         Button btnMove = new Button("Stock Movement (In/Out)");
         Button btnBack = new Button("Back");
-        setBtnWidth(btnCount, btnMove, btnBack);
+        setBtnWidth(btnViewAll, btnCount, btnMove, btnBack);
 
+        btnViewAll.setOnAction(e -> showFullInventoryScreen());
         btnCount.setOnAction(e -> showStockCountScreen());
         btnMove.setOnAction(e -> showStockMovementScreen());
         btnBack.setOnAction(e -> showMainMenu());
 
-        layout.getChildren().addAll(title, btnCount, btnMove, new Separator(), btnBack);
-        window.setScene(new Scene(layout, 400, 350));
+        layout.getChildren().addAll(title, btnViewAll, btnCount, btnMove, new Separator(), btnBack);
+        window.setScene(new Scene(layout, 400, 400));
+    }
+    
+    // --- Full Inventory Screen ---
+    private void showFullInventoryScreen() {
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(10));
+        
+        Label title = new Label("Current Inventory (Read-Only)");
+        title.setStyle("-fx-font-weight: bold;");
+        
+        TableView<ObservableList<String>> table = new TableView<>();
+        
+        try (Scanner sc = new Scanner(new File("model.csv"))) {
+            if (sc.hasNextLine()) {
+                String headerLine = sc.nextLine();
+                String[] headers = headerLine.split(",");
+                
+                // Create Columns Dynamically
+                for (int i = 0; i < headers.length; i++) {
+                    final int colIndex = i;
+                    TableColumn<ObservableList<String>, String> col = new TableColumn<>(headers[i].trim());
+                    col.setCellValueFactory(param -> new SimpleStringProperty(param.getValue().get(colIndex)));
+                    table.getColumns().add(col);
+                }
+                
+                // Load Data
+                while (sc.hasNextLine()) {
+                    String line = sc.nextLine();
+                    if(!line.trim().isEmpty()){
+                        ObservableList<String> row = FXCollections.observableArrayList(line.split(","));
+                        table.getItems().add(row);
+                    }
+                }
+            }
+        } catch (Exception e) { 
+            layout.getChildren().add(new Label("Error loading model.csv - File may not exist yet.")); 
+        }
+
+        Button backBtn = new Button("Back");
+        backBtn.setOnAction(e -> showStockMenu());
+        
+        layout.getChildren().addAll(title, table, backBtn);
+        window.setScene(new Scene(layout, 600, 400));
     }
 
     // --- Stock Count Screen ---
@@ -229,16 +288,33 @@ public class StoreGUI extends Application {
             String location = fromToField.getText(); 
             String model = modelField.getText();
             String qtyStr = qtyField.getText();
-            if(model.isEmpty() || qtyStr.isEmpty() || location.isEmpty()) { status.setText("Fill all fields."); return; }
+            
+            if(model.isEmpty() || qtyStr.isEmpty() || location.isEmpty()) { 
+                status.setText("Fill all fields."); return; 
+            }
+            
             try {
-                try(BufferedWriter w = new BufferedWriter(new FileWriter("receipts_" + LocalDate.now() + ".txt", true))) {
-                    String from = (type.equals("Stock In")) ? location : currentOutletCode;
-                    String to = (type.equals("Stock In")) ? currentOutletCode : location;
-                    w.write("\n=== "+type+" ===\nFrom: "+from+"\nTo: "+to+"\n" + model + " (Qty: " + qtyStr + ")\nUser: " + currentUserName + "\n----------------\n");
-                    status.setText("Receipt generated!"); status.setStyle("-fx-text-fill: green;");
+                int qty = Integer.parseInt(qtyStr);
+                // For Stock In, we pass negative qty to 'qtySold' param so it adds instead of subtracts
+                int adjustQty = type.equals("Stock In") ? -qty : qty;
+                
+                boolean stockUpdated = updateStockInCSV(model, adjustQty, currentOutletCode);
+                
+                if (stockUpdated) {
+                    try(BufferedWriter w = new BufferedWriter(new FileWriter("receipts_" + LocalDate.now() + ".txt", true))) {
+                        String from = (type.equals("Stock In")) ? location : currentOutletCode;
+                        String to = (type.equals("Stock In")) ? currentOutletCode : location;
+                        w.write("\n=== "+type+" ===\nFrom: "+from+"\nTo: "+to+"\n" + model + " (Qty: " + qtyStr + ")\nUser: " + currentUserName + "\n----------------\n");
+                        status.setText("Success! Stock Updated & Receipt generated."); 
+                        status.setStyle("-fx-text-fill: green;");
+                    }
+                } else {
+                    status.setText("Error: Model not found or Insufficient Stock.");
+                    status.setStyle("-fx-text-fill: red;");
                 }
-            } catch (Exception ex) { status.setText("Error writing receipt."); }
+            } catch (Exception ex) { status.setText("Error: Invalid Quantity or File Access."); }
         });
+        
         backBtn.setOnAction(e -> showStockMenu());
         grid.add(title, 0, 0, 2, 1); grid.add(new Label("Type:"), 0, 1); grid.add(typeBox, 1, 1);
         grid.add(new Label("From/To:"), 0, 2); grid.add(fromToField, 1, 2);
@@ -248,7 +324,7 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(grid, 400, 400));
     }
 
-    // --- Sales System ---
+    // --- Sales System Screen ---
     private void showSalesScreen() {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -260,7 +336,6 @@ public class StoreGUI extends Application {
         TextField qtyField = new TextField(); qtyField.setPromptText("Quantity");
         TextField priceField = new TextField(); priceField.setPromptText("Unit Price");
         
-        // MODIFICATION 1: Changed method textfield to ComboBox
         ComboBox<String> methodBox = new ComboBox<>();
         methodBox.getItems().addAll("Cash", "Card", "QR");
         methodBox.setValue("Cash");
@@ -272,7 +347,7 @@ public class StoreGUI extends Application {
             try {
                 String cust = custField.getText(); String mod = modelField.getText();
                 int q = Integer.parseInt(qtyField.getText()); double p = Double.parseDouble(priceField.getText());
-                String meth = methodBox.getValue(); // Get value from box
+                String meth = methodBox.getValue();
                 
                 if(cust.isEmpty() || mod.isEmpty() || meth == null) { status.setText("Missing fields."); return; }
                 if(updateStockInCSV(mod, q, currentOutletCode)) {
@@ -295,47 +370,116 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(grid, 400, 450));
     }
 
-    // --- Search Information ---
-    private void showSearchMenu() {
-        VBox layout = new VBox(15);
-        layout.setAlignment(Pos.CENTER);
-        layout.setPadding(new Insets(20));
-        
-        Label title = new Label("Search Information");
-        title.setStyle("-fx-font-weight: bold;");
+    // --- Sales History & Filter Screen ---
+    public static class SalesRecord {
+        private final SimpleStringProperty date, time, customer, total, items;
+        private final double amountVal;
+        private final LocalDate dateVal;
 
-        TextField searchField = new TextField();
-        searchField.setPromptText("Enter Model or Keyword");
-
-        ComboBox<String> sortBox = new ComboBox<>();
-        sortBox.getItems().addAll("Sort by Date (Newest)", "Sort by Amount (High-Low)");
-        sortBox.setValue("Sort by Date (Newest)");
-        
-        Button btnSearchStock = new Button("Search Stock (Model)");
-        Button btnSearchSales = new Button("Search Sales (Keyword)");
-        Button btnBack = new Button("Back");
-        
-        TextArea output = new TextArea();
-        output.setEditable(false);
-        output.setPrefHeight(300);
-
-        btnSearchStock.setOnAction(e -> output.setText(searchStockLogic(searchField.getText())));
-        
-        btnSearchSales.setOnAction(e -> {
-            String res = searchSalesLogic(searchField.getText(), sortBox.getValue());
-            output.setText(res);
-        });
-
-        btnBack.setOnAction(e -> showMainMenu());
-
-        setBtnWidth(btnSearchStock, btnSearchSales, btnBack);
-
-        layout.getChildren().addAll(title, searchField, new Label("Sales Sorting:"), sortBox, 
-                                    btnSearchStock, btnSearchSales, output, btnBack);
-        window.setScene(new Scene(layout, 500, 550));
+        public SalesRecord(String d, String t, String c, String tot, String i) {
+            this.date = new SimpleStringProperty(d);
+            this.time = new SimpleStringProperty(t);
+            this.customer = new SimpleStringProperty(c);
+            this.total = new SimpleStringProperty(tot);
+            this.items = new SimpleStringProperty(i);
+            this.amountVal = Double.parseDouble(tot);
+            this.dateVal = LocalDate.parse(d);
+        }
+        public String getDate() { return date.get(); }
+        public String getTime() { return time.get(); }
+        public String getCustomer() { return customer.get(); }
+        public String getTotal() { return total.get(); }
+        public String getItems() { return items.get(); }
+        public double getAmountVal() { return amountVal; }
+        public LocalDate getDateVal() { return dateVal; }
     }
 
-    // --- Reports & Analytics ---
+    private void showHistoryFilterScreen() {
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(15));
+        
+        Label title = new Label("Sales History (Filter & Sort)");
+        title.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        // Filter Controls
+        HBox filters = new HBox(10);
+        DatePicker startDate = new DatePicker(); startDate.setPromptText("Start Date");
+        DatePicker endDate = new DatePicker(); endDate.setPromptText("End Date");
+        Button filterBtn = new Button("Apply Date Filter");
+
+        HBox sorts = new HBox(10);
+        ComboBox<String> sortBox = new ComboBox<>();
+        sortBox.getItems().addAll("Date (Newest First)", "Date (Oldest First)", "Amount (High-Low)", "Amount (Low-High)", "Customer (A-Z)");
+        sortBox.setValue("Date (Newest First)");
+        Button sortBtn = new Button("Apply Sort");
+
+        filters.getChildren().addAll(new Label("From:"), startDate, new Label("To:"), endDate, filterBtn);
+        sorts.getChildren().addAll(new Label("Sort By:"), sortBox, sortBtn);
+
+        // Table Setup
+        TableView<SalesRecord> table = new TableView<>();
+        TableColumn<SalesRecord, String> colDate = new TableColumn<>("Date"); colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
+        TableColumn<SalesRecord, String> colTime = new TableColumn<>("Time"); colTime.setCellValueFactory(new PropertyValueFactory<>("time"));
+        TableColumn<SalesRecord, String> colCust = new TableColumn<>("Customer"); colCust.setCellValueFactory(new PropertyValueFactory<>("customer"));
+        TableColumn<SalesRecord, String> colTot = new TableColumn<>("Total (RM)"); colTot.setCellValueFactory(new PropertyValueFactory<>("total"));
+        TableColumn<SalesRecord, String> colItem = new TableColumn<>("Items"); colItem.setCellValueFactory(new PropertyValueFactory<>("items"));
+        colItem.setMinWidth(200);
+        
+        table.getColumns().addAll(colDate, colTime, colCust, colTot, colItem);
+
+        // Data Logic
+        List<SalesRecord> allRecords = loadSalesRecords();
+        table.setItems(FXCollections.observableArrayList(allRecords)); 
+
+        // Filter Action
+        filterBtn.setOnAction(e -> {
+            LocalDate start = startDate.getValue();
+            LocalDate end = endDate.getValue();
+            if (start == null || end == null) return;
+            
+            List<SalesRecord> filtered = allRecords.stream()
+                .filter(r -> (r.getDateVal().isEqual(start) || r.getDateVal().isAfter(start)) && 
+                             (r.getDateVal().isEqual(end) || r.getDateVal().isBefore(end)))
+                .collect(Collectors.toList());
+            table.setItems(FXCollections.observableArrayList(filtered));
+            
+            double sum = filtered.stream().mapToDouble(SalesRecord::getAmountVal).sum();
+            new Alert(Alert.AlertType.INFORMATION, "Total Sales in Range: RM " + String.format("%.2f", sum)).show();
+        });
+
+        // Sort Action
+        sortBtn.setOnAction(e -> {
+            ObservableList<SalesRecord> current = table.getItems();
+            String mode = sortBox.getValue();
+            if(mode.contains("Newest")) current.sort(Comparator.comparing(SalesRecord::getDateVal).reversed());
+            else if(mode.contains("Oldest")) current.sort(Comparator.comparing(SalesRecord::getDateVal));
+            else if(mode.contains("High-Low")) current.sort(Comparator.comparing(SalesRecord::getAmountVal).reversed());
+            else if(mode.contains("Low-High")) current.sort(Comparator.comparing(SalesRecord::getAmountVal));
+            else if(mode.contains("Customer")) current.sort(Comparator.comparing(SalesRecord::getCustomer));
+        });
+
+        Button backBtn = new Button("Back");
+        backBtn.setOnAction(e -> showMainMenu());
+
+        layout.getChildren().addAll(title, filters, sorts, table, backBtn);
+        window.setScene(new Scene(layout, 700, 500));
+    }
+
+    private List<SalesRecord> loadSalesRecords() {
+        List<SalesRecord> list = new ArrayList<>();
+        try (Scanner sc = new Scanner(new File("sales.csv"))) {
+            if(sc.hasNextLine()) sc.nextLine(); 
+            while(sc.hasNextLine()) {
+                String[] p = sc.nextLine().split(",");
+                if(p.length >= 7) {
+                    list.add(new SalesRecord(p[0], p[1], p[4], p[6], (p.length>7?p[7]:"")));
+                }
+            }
+        } catch(Exception e) {}
+        return list;
+    }
+
+    // --- Reports & Analytics Menu ---
     private void showAnalyticsMenu() {
         VBox layout = new VBox(15);
         layout.setAlignment(Pos.CENTER);
@@ -349,8 +493,8 @@ public class StoreGUI extends Application {
         reportArea.setPrefHeight(250);
 
         Button btnDataAnalytics = new Button("Data Analytics (Revenue)");
-        Button btnEmpMetrics = new Button("Employee Performance Metrics");
-        Button btnAutoEmail = new Button("Auto Email to HQ");
+        Button btnEmpMetrics = new Button("Employee Performance Metrics (Manager Only)"); 
+        Button btnAutoEmail = new Button("Send Daily Report to HQ (Email)");
         Button btnBack = new Button("Back");
 
         setBtnWidth(btnDataAnalytics, btnEmpMetrics, btnAutoEmail, btnBack);
@@ -369,15 +513,31 @@ public class StoreGUI extends Application {
                 }
                 reportArea.setText("=== DATA ANALYTICS ===\n\n");
                 reportArea.appendText("Total Sales Count: " + totalCount + "\n");
-                // MODIFICATION 4: Changed currency to RM
                 reportArea.appendText(String.format("Total Revenue: RM%.2f\n", totalRevenue));
                 reportArea.appendText("Average Order Value: RM" + (totalCount > 0 ? String.format("%.2f", totalRevenue/totalCount) : "0.00"));
             } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
         });
 
-        // Performance Logic
+        // Employee Metrics Logic
         btnEmpMetrics.setOnAction(e -> {
+            if(!currentUserRole.equalsIgnoreCase("Manager")) {
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Access Denied. Manager Role Required.");
+                alert.show();
+                return;
+            }
+            
+            // Load Employee Names
+            Map<String, String> empNames = new HashMap<>();
+            try (Scanner sc = new Scanner(new File("employee.csv"))) {
+                while(sc.hasNextLine()) {
+                    String[] p = sc.nextLine().split(",");
+                    if(p.length >= 2) empNames.put(p[0].trim(), p[1].trim());
+                }
+            } catch(Exception ex) {}
+
             Map<String, Double> salesMap = new HashMap<>();
+            Map<String, Integer> countMap = new HashMap<>(); 
+            
             try (Scanner sc = new Scanner(new File("sales.csv"))) {
                 if(sc.hasNextLine()) sc.nextLine();
                 while(sc.hasNextLine()) {
@@ -386,29 +546,28 @@ public class StoreGUI extends Application {
                         String empID = p[3]; 
                         double amt = Double.parseDouble(p[6]);
                         salesMap.put(empID, salesMap.getOrDefault(empID, 0.0) + amt);
+                        countMap.put(empID, countMap.getOrDefault(empID, 0) + 1);
                     }
                 }
-                StringBuilder sb = new StringBuilder("=== EMPLOYEE PERFORMANCE ===\n(Total Revenue Generated)\n\n");
-                // MODIFICATION 4: Changed currency to RM
-                salesMap.forEach((k, v) -> sb.append("Employee ").append(k).append(": RM").append(String.format("%.2f", v)).append("\n"));
+                List<Map.Entry<String, Double>> sorted = new ArrayList<>(salesMap.entrySet());
+                sorted.sort((a,b) -> b.getValue().compareTo(a.getValue()));
+
+                StringBuilder sb = new StringBuilder("=== EMPLOYEE PERFORMANCE ===\n(Ranked by Revenue)\n\n");
+                for(Map.Entry<String, Double> entry : sorted) {
+                    String id = entry.getKey();
+                    String name = empNames.getOrDefault(id, "Unknown");
+                    sb.append("Emp: ").append(name).append(" (ID: ").append(id).append(")")
+                      .append(" | Transactions: ").append(countMap.get(id))
+                      .append(" | Total: RM").append(String.format("%.2f", entry.getValue())).append("\n");
+                }
                 reportArea.setText(sb.toString());
             } catch(Exception ex) { reportArea.setText("Error reading sales data."); }
         });
 
-        // Email Logic
+        // Auto Email Logic
         btnAutoEmail.setOnAction(e -> {
-            try (BufferedWriter log = new BufferedWriter(new FileWriter("email_log.txt", true))) {
-                log.write("REPORT SENT: " + LocalDate.now() + " " + LocalTime.now() + " | Outlet: " + currentOutletCode + "\n");
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("Auto Email");
-                alert.setHeaderText("Report Sent Successfully");
-                alert.setContentText("Daily sales report has been emailed to hq@store.com.");
-                alert.showAndWait();
-            } catch(Exception ex) { 
-                Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setContentText("Failed to send email.");
-                alert.show();
-            }
+            generateDailyReportFile(); 
+            sendRealEmail();          
         });
 
         btnBack.setOnAction(e -> showMainMenu());
@@ -417,6 +576,97 @@ public class StoreGUI extends Application {
         window.setScene(new Scene(layout, 500, 500));
     }
 
+    // --- Email Helper Methods ---
+    
+    // Generate Attachment
+    private void generateDailyReportFile() {
+        String fileName = "DailySales_" + LocalDate.now() + ".txt";
+        double total = 0;
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(fileName));
+             Scanner sc = new Scanner(new File("sales.csv"))) {
+             
+            w.write("DAILY SALES REPORT - " + LocalDate.now() + "\n");
+            w.write("Outlet: " + currentOutletName + "\n--------------------------------\n");
+            
+            if(sc.hasNextLine()) sc.nextLine();
+            while(sc.hasNextLine()) {
+                String line = sc.nextLine();
+                if(line.startsWith(LocalDate.now().toString())) { 
+                    w.write(line + "\n");
+                    String[] p = line.split(",");
+                    if(p.length >= 7) total += Double.parseDouble(p[6]);
+                }
+            }
+            w.write("\n--------------------------------\nTOTAL REVENUE: RM" + String.format("%.2f", total));
+        } catch (IOException ex) {
+            new Alert(Alert.AlertType.ERROR, "Failed to generate report file.").show();
+        }
+    }
+
+    // Send Email Implementation
+    private void sendRealEmail() {
+        // Calculate total for email body
+        double bodyTotal = 0.0;
+        try(Scanner sc = new Scanner(new File("sales.csv"))) {
+            if(sc.hasNextLine()) sc.nextLine();
+            while(sc.hasNextLine()) {
+                String line = sc.nextLine();
+                if(line.startsWith(LocalDate.now().toString())) {
+                     String[] p = line.split(",");
+                     if(p.length >= 7) bodyTotal += Double.parseDouble(p[6]);
+                }
+            }
+        } catch (Exception e) {}
+        
+        // Properties
+        Properties prop = new Properties();
+        prop.put("mail.smtp.host", "smtp.gmail.com");
+        prop.put("mail.smtp.port", "587");
+        prop.put("mail.smtp.auth", "true");
+        prop.put("mail.smtp.starttls.enable", "true");
+
+        // Session
+        Session session = Session.getInstance(prop, new Authenticator() {
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(GMAIL_USERNAME, GMAIL_APP_PASSWORD);
+            }
+        });
+
+        try {
+            // Message
+            Message message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(GMAIL_USERNAME));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(STUDENT_EMAIL));
+            message.setSubject("Daily Sales Summary - " + LocalDate.now());
+
+            // Multipart
+            Multipart multipart = new MimeMultipart();
+
+            // Body
+            BodyPart messageBodyPart = new MimeBodyPart();
+            messageBodyPart.setText("Attached is the daily sales report.\n\nDate: " + LocalDate.now() + 
+                                  "\nTotal Revenue: RM" + String.format("%.2f", bodyTotal));
+            multipart.addBodyPart(messageBodyPart);
+
+            // Attachment
+            messageBodyPart = new MimeBodyPart();
+            String fileName = "DailySales_" + LocalDate.now() + ".txt";
+            FileDataSource source = new FileDataSource(fileName);
+            messageBodyPart.setDataHandler(new DataHandler(source));
+            messageBodyPart.setFileName(fileName);
+            multipart.addBodyPart(messageBodyPart);
+
+            message.setContent(multipart);
+            Transport.send(message);
+
+            new Alert(Alert.AlertType.INFORMATION, "Real Email Sent Successfully!").showAndWait();
+
+        } catch (MessagingException e) {
+            e.printStackTrace();
+            new Alert(Alert.AlertType.ERROR, "Email Failed: " + e.getMessage()).show();
+        }
+    }
 
     // --- Edit Information Menu ---
     private void showEditMenu() {
@@ -461,7 +711,6 @@ public class StoreGUI extends Application {
         TextField salesCust = new TextField(); salesCust.setPromptText("Enter Customer Name"); salesCust.setMaxWidth(250);
         Button salesFind = new Button("Find Record");
         
-        // MODIFICATION 3: Better formatting (added preview area)
         Label previewLbl = new Label("Record Preview:");
         TextArea previewArea = new TextArea();
         previewArea.setEditable(false);
@@ -492,7 +741,6 @@ public class StoreGUI extends Application {
                 while(sc.hasNextLine()) cacheLines.add(sc.nextLine());
                 boolean found = false;
                 for(int i=0; i<cacheLines.size(); i++) {
-                    // MODIFICATION 3: Case insensitive search
                     if(cacheLines.get(i).toLowerCase().contains(salesCust.getText().toLowerCase()) && !salesCust.getText().isEmpty()) {
                         salesEditLine.setText(cacheLines.get(i));
                         
@@ -500,7 +748,7 @@ public class StoreGUI extends Application {
                         String[] p = cacheLines.get(i).split(",");
                         if(p.length >= 7) {
                             String pretty = "Date: " + p[0] + " | Cust: " + p[4] + " | Total: RM" + p[6] + "\n" +
-                                          "Items: " + (p.length > 7 ? p[7] : "N/A");
+                                            "Items: " + (p.length > 7 ? p[7] : "N/A");
                             previewArea.setText(pretty);
                         }
 
@@ -576,6 +824,39 @@ public class StoreGUI extends Application {
     }
 
     // --- Helper Methods (File I/O) ---
+    private void createDummyFilesIfMissing() {
+        try {
+            File emp = new File("employee.csv");
+            if(emp.createNewFile()) {
+                BufferedWriter w = new BufferedWriter(new FileWriter(emp));
+                w.write("ADM01,Admin User,Manager,admin123"); w.newLine();
+                w.write("JB101,John Doe,Staff,1234"); w.newLine();
+                w.close();
+            }
+            File mod = new File("model.csv");
+            if(mod.createNewFile()) {
+                BufferedWriter w = new BufferedWriter(new FileWriter(mod));
+                w.write("Model,JB1,KL1,Price"); w.newLine();
+                w.write("iPhone 13,10,5,3000.00"); w.newLine();
+                w.write("Samsung S22,8,8,2800.00"); w.newLine();
+                w.close();
+            }
+            File out = new File("outlet.csv");
+            if(out.createNewFile()) {
+                BufferedWriter w = new BufferedWriter(new FileWriter(out));
+                w.write("JB1,Johor Branch"); w.newLine();
+                w.write("KL1,KL Branch"); w.newLine();
+                w.close();
+            }
+            File sales = new File("sales.csv");
+            if(sales.createNewFile()) {
+                BufferedWriter w = new BufferedWriter(new FileWriter(sales));
+                w.write("Date,Time,Outlet,User,Customer,Method,Total,Items"); w.newLine();
+                w.close();
+            }
+        } catch(IOException e) {}
+    }
+
     private boolean performLogin(String id, String pass) {
         try (Scanner sc = new Scanner(new File("employee.csv"))) {
             while (sc.hasNextLine()) {
@@ -645,6 +926,8 @@ public class StoreGUI extends Application {
                 if(colIndex != -1 && p[0].equalsIgnoreCase(model)) {
                     try {
                         int cur = Integer.parseInt(p[colIndex].trim());
+                        // If qtySold is positive, we are selling (subtracting). Check if stock >= qty.
+                        // If qtySold is negative, we are restocking (adding). cur >= negative is always true.
                         if(cur >= qtySold) {
                             p[colIndex] = String.valueOf(cur - qtySold);
                             line = String.join(",", p);
@@ -671,94 +954,6 @@ public class StoreGUI extends Application {
                     meth + "," + (q*p) + "," + mod + ":" + q + ";");
             w.newLine();
         } catch(Exception e) {}
-    }
-
-    private String searchStockLogic(String key) {
-        StringBuilder sb = new StringBuilder();
-        try (Scanner sc = new Scanner(new File("model.csv"))) {
-            String header = sc.nextLine(); 
-            String[] headers = header.split(","); 
-            
-            while(sc.hasNextLine()) {
-                String line = sc.nextLine();
-                if(line.toLowerCase().contains(key.toLowerCase())) {
-                    String[] p = line.split(",");
-                    sb.append("Model: ").append(p[0]).append("\n");
-                    for(int i=1; i<p.length; i++) {
-                        if(i < headers.length) {
-                             // MODIFICATION 2: Handle "Price" header and Unknown Outlets
-                             String hName = headers[i].trim();
-                             if(hName.equalsIgnoreCase("Price")) {
-                                 sb.append(" - Price: RM").append(p[i]).append("\n");
-                             } else {
-                                 String outName = getOutletNameFromFile(hName);
-                                 if(!outName.contains("Unknown")) {
-                                     sb.append(" - ").append(outName).append(" (").append(hName).append("): ").append(p[i]).append("\n");
-                                 } else {
-                                     // If really unknown, just show code or skip
-                                     sb.append(" - ").append(hName).append(": ").append(p[i]).append("\n");
-                                 }
-                             }
-                        }
-                    }
-                    sb.append("--------------------\n");
-                }
-            }
-        } catch(Exception e) { return "Error reading model.csv"; }
-        return sb.length() > 0 ? sb.toString() : "No results.";
-    }
-
-    private String searchSalesLogic(String key, String sortBy) {
-        List<String[]> records = new ArrayList<>();
-        try (Scanner sc = new Scanner(new File("sales.csv"))) {
-            if(sc.hasNextLine()) sc.nextLine(); 
-            while(sc.hasNextLine()) {
-                String line = sc.nextLine();
-                if(line.toLowerCase().contains(key.toLowerCase())) {
-                    records.add(line.split(","));
-                }
-            }
-        } catch(Exception e) { return "Error reading sales.csv"; }
-
-        if(sortBy.contains("Amount")) {
-            records.sort((a, b) -> {
-                try {
-                    double v1 = Double.parseDouble(a[6]);
-                    double v2 = Double.parseDouble(b[6]);
-                    return Double.compare(v2, v1);
-                } catch(Exception e) { return 0; }
-            });
-        } else {
-            Collections.reverse(records);
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for(String[] p : records) {
-            if (p.length >= 7) {
-                sb.append("Date: ").append(p[0]).append(" | Time: ").append(p[1]).append("\n");
-                sb.append("Customer: ").append(p[4]).append("\n");
-                // MODIFICATION 2.1: Changed to RM
-                sb.append("Total: RM").append(p[6]).append("\n");
-                
-                // MODIFICATION 2.1: Parse Items and Quantity
-                String rawItems = p.length > 7 ? p[7] : "";
-                if(rawItems.contains(":")) {
-                     String[] parts = rawItems.split(":");
-                     if(parts.length >= 2) {
-                         // Removes semicolon if present
-                         String qty = parts[1].replace(";", "");
-                         sb.append("Items: ").append(parts[0])
-                           .append(", Quantity: ").append(qty).append("\n");
-                     } else {
-                         sb.append("Items: ").append(rawItems).append("\n");
-                     }
-                } else {
-                     sb.append("Items: ").append(rawItems).append("\n");
-                }
-                sb.append("--------------------\n");
-            }
-        }
-        return sb.length() > 0 ? sb.toString() : "No records found.";
     }
 
     private boolean updateExactStock(String model, String outlet, String newQty) {

@@ -1,1 +1,4 @@
 Date,Time,OutletCode,EmployeeID,CustomerName,TransactionMethod,Subtotal,Items:Qty
+2026-01-18,14:20:12,C60,C6001,Andrew,Cash,399.0,DW2300-1:1;
+2026-01-18,14:24:36,C60,C6001,Bob,Cash,399.0,DW2300-1:1;
+2026-01-18,14:25:05,C60,C6001,Clara,Cash,798.0,DW2300-1:2;
