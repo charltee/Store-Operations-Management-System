@@ -6,18 +6,18 @@
     "configurations": [
         {
             "type": "java",
-            "name": "Main",
-            "request": "launch",
-            "mainClass": "Main",
-            "projectName": "Store Operations Management System_4ad97b3f"
-        },
-        {
-            "type": "java",
             "name": "StoreGUI",
             "request": "launch",
             "mainClass": "StoreGUI",
-            "projectName": "Store Operations Management System_4ad97b3f",
-            "vmArgs": "--module-path \"C:/Program Files/Java/javafx-sdk-25.0.1/lib\" --add-modules javafx.controls,javafx.fxml"
+            "projectName": "Store Operations Management System_67eb3c31",
+            "vmArgs": "--module-path \"${workspaceFolder}/lib\" --add-modules javafx.controls,javafx.fxml --enable-native-access=javafx.graphics -Djava.library.path=\"${workspaceFolder}/lib\""
+        },
+        {
+            "type": "java",
+            "name": "Main",
+            "request": "launch",
+            "mainClass": "Main",
+            "projectName": "Store Operations Management System_67eb3c31"
         },
         {
             "type": "java",
